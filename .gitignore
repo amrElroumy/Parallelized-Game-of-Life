@@ -1,0 +1,16 @@
+syntax: glob
+
+ipch/
+x64/
+Debug/*
+Release/*
+obj/
+bin/
+*sdf
+*.suo
+*.user
+*.Cache
+*.ipch
+*.log
+*.exe
+*.metagen
