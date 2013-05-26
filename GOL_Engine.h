@@ -8,8 +8,10 @@
 #include <sstream>
 using namespace std;
 
-#define OFFSET(Y, X) (Y * _nCols + X)
-#define OFFSETP(Y, X) (Y * _nPaddedCols + X)
+#define OFFSET(Y, X) ((Y) * _nCols + (X))
+#define OFFSETP(Y, X) ((Y) * _nPaddedCols + (X))
+
+//#define OFFSETP(Y, X) ((Y+1) * _nPaddedCols + (X+1))
 
 class GOL_Engine
 {
@@ -22,9 +24,12 @@ private:
 
 public:
 	int _rank;
-	
+
 private:
 	int _size;
+
+	//int OFFSETP(int Y, int X) { return Y * _nPaddedCols + X; }
+	//int OFFSET(int Y, int X) { return Y * _nCols + X; }
 
 	static const int adjX[];
 	static const int adjY[];
@@ -70,7 +75,9 @@ private:
 		{
 			for (int j=0; j<_nCols; j++)
 			{
-				_grid[OFFSET (i,j)] = _paddedGrid[OFFSET (i,j)] = -1;
+				//sherif edited
+				/*_grid[OFFSET (i,j)] = _paddedGrid[OFFSET (i,j)] = -1;*/
+				_grid[OFFSET (i,j)] = _paddedGrid[OFFSETP (i,j)] = -1;
 			}
 		}
 	}
@@ -149,7 +156,7 @@ public:
 
 			// todo remove comment
 			int nChunks = _nRows / (_size-1);
-			clog << "nrows: " << _nRows << " nChunks: " <<   nChunks << " " << "nCols: " << _nPaddedCols << "size: " << _size - 1<< endl;
+			clog << "nrows: " << _nRows << " nChunks: " <<   nChunks << "  nCols: " << _nPaddedCols << " size: " << _size - 1<< endl;
 
 			int dimensions[2] = {nChunks, _nCols};
 
@@ -162,8 +169,9 @@ public:
 
 			if (_size > 2)
 			{
-				int remainder = _nRows % _size;
+				int remainder = _nRows % (_size-1);
 				dimensions[0] = nChunks + remainder;
+				clog << "Sending dimensions to slave " << _size - 1 << " D[0]: " << dimensions[0] << " D[1]: " << dimensions[1] << "REM " << remainder << endl;
 				requests[_size - 2] = MPI::COMM_WORLD.Isend (dimensions, 2, MPI::INT, _size - 1, TAG_INITIALIZATION);
 			}
 
@@ -269,6 +277,21 @@ public:
 		cout << endl;
 	}
 
+	void DisplayL()
+	{
+		// Called only in MASTER so we neglect the ghost rows and columns
+		for (int y=0; y<_nRows; y++)
+		{
+			for (int x=0; x<_nCols; x++)
+			{
+				clog << (int) _grid[OFFSET (y,x)];
+			}
+
+			clog << endl;
+		}
+
+		clog << endl;
+	}
 	void Display()
 	{
 		// Called only in MASTER so we neglect the ghost rows and columns
@@ -298,12 +321,34 @@ public:
 				_paddedGrid[OFFSETP (i,_nPaddedCols - 1)] = _grid[OFFSET (i-1,0)];	    // Right ghost column from leftmost column
 			}
 
+			//this->Display();
+
+			//for (int i=1; i<_nRows + 1; i++)
+			//{
+			//	cout << "i: " << i << endl;
+			//	cout << (int) _paddedGrid[OFFSETP (i, 0)] << " " <<  (int) _grid[OFFSET (i-1, _nCols-1)] << endl;			// Left ghost column from rightmost column
+			//	cout << "OFFSET (i-1,0): " << OFFSET (i-1,0) << endl;
+			//	cout << (int) _paddedGrid[OFFSETP (i,_nPaddedCols - 1)] << " " << (int)_grid[OFFSET (i-1,0)] << endl;;	    // Right ghost column from leftmost column
+			//	cout << endl;
+			//}
+
 			// copy top and bottom
 			for (int i=1; i<_nCols + 1; i++)
 			{
 				_paddedGrid[OFFSETP (0,i)] = _grid[OFFSET (_nRows-1,i-1)];
 				_paddedGrid[OFFSETP (_nPaddedRows - 1,i)] = _grid[OFFSET (0,i-1)];
 			}
+
+			/*for (int i = 0; i<_nPaddedRows; i++)
+			{
+				for (int j = 0; j<_nPaddedCols; j++)
+				{
+					cout << _paddedGrid[i * _nPaddedCols + j];
+
+				}
+
+				cout << endl;
+			}*/
 
 			for (int y=0; y<_nRows; y++)
 			{
@@ -313,12 +358,33 @@ public:
 				}
 			}
 
+			/*for (int i = 0; i<_nPaddedRows; i++)
+			{
+				for (int j = 0; j<_nPaddedCols; j++)
+				{
+					cout << _paddedGrid[i * _nPaddedCols + j];
+
+				}
+
+				cout << endl;
+			}*/
+
 			// copy corner cells by mirroring diagonals
 			_paddedGrid[OFFSETP (0,0)]								  =_grid[OFFSET (_nRows - 1, _nCols-1)];
 			_paddedGrid[OFFSETP (0,_nPaddedCols - 1)]				  =_grid[OFFSET (_nRows - 1, 0)];
 			_paddedGrid[OFFSETP (_nPaddedRows - 1, 0)]				  =_grid[OFFSET (0,_nCols-1)];
 			_paddedGrid[OFFSETP (_nPaddedRows - 1, _nPaddedCols - 1)] =_grid[OFFSET (0,0)];
 
+			//for (int i = 0; i<_nPaddedRows; i++)
+			//{
+			//	for (int j = 0; j<_nPaddedCols; j++)
+			//	{
+			//		cout << _paddedGrid[i * _nPaddedCols + j];
+
+			//	}
+
+			//	cout << endl;
+			//}
 
 			clog << "[MASTER]: Finished initializing ghost rows" << endl;
 		}
@@ -342,17 +408,17 @@ public:
 
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Isend (_paddedGrid, (nChunks) * _nPaddedCols , MPI::INT, i, TAG_DATA);
+				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::INT, i, TAG_DATA);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
-				start += nChunks;
+				start += nChunks - 2;
 			}
 
 			clog << "nChunks: " << nChunks << " " << "nPaddedCols: " << _nPaddedCols << "remainder: " << remainder << endl;
 
 			// The last process takes the normal chunk size + remaining rows
-			requests[_size - 2] = MPI::COMM_WORLD.Isend (_paddedGrid, (nChunks + remainder) * _nPaddedCols, MPI::INT, _size - 1, TAG_DATA);
+			requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::INT, _size - 1, TAG_DATA);
 
 			MPI::Request::Waitall (_size-1, requests);
 			//delete[] requests;
@@ -363,7 +429,7 @@ public:
 		}
 		else
 		{
-			clog << "[Slave " << _rank << " ]: Receiving data from master" << "nPaddedRows: " << _nPaddedRows << "nPaddedCols: " << _nPaddedCols << endl;
+			clog << "[Slave " << _rank << " ]: Receiving data from master" << " nPaddedRows: " << _nPaddedRows << "nPaddedCols: " << _nPaddedCols << endl;
 			clog.flush();
 
 			MPI::COMM_WORLD.Recv (_paddedGrid, ( (_nPaddedRows) * _nPaddedCols), MPI::INT, 0, TAG_DATA);
@@ -411,6 +477,9 @@ public:
 							{ _grid[OFFSET (y-1,x-1)] = false; }
 					}
 				}
+
+				this->DisplayL();
+
 			}
 			catch
 				(std::exception* e)

@@ -12,23 +12,23 @@ int main (int argc, char** argv)
 
 	GOL_Engine golEngine (argc, argv, mapPath);
 
-	golEngine.InitGhostCells();
+	//golEngine.Display();
+	//golEngine.InitGhostCells();
 
-	if (golEngine._rank == MASTER)
-	{
-		golEngine.Display();
-		golEngine.DisplayPadded();
-	}
-
-	//for (int i=0; i<nGenerations; i++)
+	//if (golEngine._rank == MASTER)
 	//{
-	//	golEngine.InitGhostCells();
-	//	golEngine.DisplayPadded();
-	//	golEngine.ForkDataToSlaves();
-	//	golEngine.ApplyRules();
-	//	golEngine.CombineDataToMaster();
+	//	//golEngine.Display();
 	//	golEngine.DisplayPadded();
 	//}
+
+	for (int i=0; i<nGenerations; i++)
+	{
+		golEngine.InitGhostCells();
+		golEngine.ForkDataToSlaves();
+		golEngine.ApplyRules();
+		golEngine.CombineDataToMaster();
+		golEngine.DisplayPadded();
+	}
 
 	golEngine.Dispose();
 	return 0;
