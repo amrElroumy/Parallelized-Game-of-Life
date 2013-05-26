@@ -83,7 +83,9 @@
     <ClCompile Include="Driver.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="config.txt" />
+    <Text Include="config.txt">
+      <DeploymentContent>true</DeploymentContent>
+    </Text>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Constants.h" />

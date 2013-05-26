@@ -118,7 +118,7 @@ public:
 
 			if (_size == 1)
 			{
-				cerr << "[MASTER]: Minimum number of machines is 2\nExitting.." << endl;
+				cerr << "[MASTER]: Minimum number of machines is 2 as we are using Master & Slaves scheme\nExitting.." << endl;
 				MPI::Finalize();
 				exit (EXIT_FAILURE);
 			}
@@ -128,25 +128,33 @@ public:
 			clog << "[MASTER]: Finished initializing map" << endl;
 
 
-			int nChunks = _nRows / (_size-1);
-			clog << "nrows: " << _nRows << " nChunks: " <<   nChunks << "  nCols: " << _nPaddedCols << " size: " << _size - 1<< endl;
-
-			int dimensions[2] = {nChunks, _nCols};
+			int dimensions[2] = {-1, _nCols};
 
 			MPI::Request* requests = new MPI::Request[_size-1];
 
-			for (int i=1; i<_size - 1; i++)
-			{
-				requests[i-1] = MPI::COMM_WORLD.Isend (dimensions, 2, MPI::INT, i, TAG_INITIALIZATION);
-			}
-
 			if (_size > 2)
 			{
+				int nChunks = _nRows / (_size-1);
+				dimensions[0] = nChunks;
+
+				clog << "nrows: " << _nRows << " nChunks: " <<   nChunks << "  nCols: " << _nPaddedCols << " size: " << _size - 1<< endl;
+
+				for (int i=1; i<_size - 1; i++)
+				{
+					requests[i-1] = MPI::COMM_WORLD.Isend (dimensions, 2, MPI::INT, i, TAG_INITIALIZATION);
+				}
+
 				int remainder = _nRows % (_size-1);
 				dimensions[0] = nChunks + remainder;
 				clog << "Sending dimensions to slave " << _size - 1 << " D[0]: " << dimensions[0] << " D[1]: " << dimensions[1] << "REM " << remainder << endl;
 				requests[_size - 2] = MPI::COMM_WORLD.Isend (dimensions, 2, MPI::INT, _size - 1, TAG_INITIALIZATION);
 			}
+			else
+				if (_size == 2)
+				{
+					dimensions[0] = _nRows;
+					requests[0] = MPI::COMM_WORLD.Isend (dimensions, 2, MPI::INT, _size - 1, TAG_INITIALIZATION);
+				}
 
 			MPI::Request::Waitall (_size-1, requests);
 
@@ -320,31 +328,37 @@ public:
 			clog << "[MASTER]: Forking data to slaves" << endl;
 
 			int start = 0; // The start index takes in account the index of the first ghost row
-			int nChunks = (_nRows / (_size-1) ) + 2;
-
-			clog << "nChunks: " << nChunks << "  nPaddedCols: " << _nPaddedCols;
 
 			DisplayPaddedL();
 
 			MPI::Request* requests = new MPI::Request[_size-1];
 
-			for (int i=1; i<_size-1; i++)
-			{
-				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::BOOL, i, TAG_DATA_FORK);
-
-				// Update the start index to stand on the row above the last sent row
-				// to send it to the next process and be able to process the last sent row
-				start += nChunks - 2;
-			}
+			int nChunks = (_nRows / (_size-1) ) + 2;
 
 			if (_size > 2)
 			{
+				clog << "nChunks: " << nChunks << "  nPaddedCols: " << _nPaddedCols;
+
+				for (int i=1; i<_size-1; i++)
+				{
+					requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::BOOL, i, TAG_DATA_FORK);
+
+					// Update the start index to stand on the row above the last sent row
+					// to send it to the next process and be able to process the last sent row
+					start += nChunks - 2;
+				}
+
 				// The last process takes the normal chunk size + remaining rows
 				int remainder = _nRows % (_size-1);
 				requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::BOOL, _size - 1, TAG_DATA_FORK);
 
 				clog << "remainder: " << remainder << endl;
 			}
+			else
+				if (_size == 2)
+				{
+					requests[0] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks ) * _nPaddedCols, MPI::BOOL, _size - 1, TAG_DATA_FORK);
+				}
 
 			// Wait for all threads to receive the data from the master thread
 			MPI::Request::Waitall (_size-1, requests);
@@ -383,17 +397,12 @@ public:
 
 						for (int y=1; y<_nPaddedRows - 1; y++)
 						{
-							//cout << "iteration no. " << y << endl;
-
 							for (int x = 1; x<_nPaddedCols - 1; x++)
 							{
 								int nAliveAdj = 0;
 
 								for (int i=0; i<8; i++)
 								{
-									//cout << "i: " << i << endl;
-									//cout << "y: " << y << " x:" << x << endl;
-
 									if (isInPaddedMap (adjX[i] + x, adjY[i] + y) && (_paddedGrid[ OFFSETP ( (adjY[i] + y), (adjX[i] + x) )]) )
 									{
 										nAliveAdj++;
