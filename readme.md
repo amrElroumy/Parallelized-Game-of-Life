@@ -1,4 +1,6 @@
-# Conways' Game of Life
+# Parallelized Conway's Game of Life
+
+Implemented using MPI and OMP.
 
 ## Rules
 
