@@ -9,13 +9,12 @@
 #include <assert.h>
 #include <iosfwd>
 #include <sstream>
-//#include <omp.h>
+#include <omp.h>
 using namespace std;
 #pragma endregion
 
 #define OFFSET(Y, X) ((Y) * _nCols + (X))
 #define OFFSETP(Y, X) ((Y) * _nPaddedCols + (X))
-//#define OFFSETP(Y, X) ((Y+1) * _nPaddedCols + (X+1))
 
 class GOL_Engine
 {
@@ -33,9 +32,6 @@ public:
 	int Rank() const { return _rank; }
 
 private:
-
-	//int OFFSETP(int Y, int X) { return Y * _nPaddedCols + X; }
-	//int OFFSET(int Y, int X) { return Y * _nCols + X; }
 
 	static const int adjX[];
 	static const int adjY[];
@@ -64,24 +60,11 @@ private:
 		_grid = new bool[_nRows*_nCols];
 		_paddedGrid = new bool[_nPaddedRows * _nPaddedCols];
 
-		//for (i = 0; i<_nRows; i++)
-		//{
-		//	_grid[i] = new bool[_nCols];
-		//	_paddedGrid[i] = new bool[_nPaddedCols];
-		//}
-
-		//for (; i<_nPaddedRows; i++)
-		//{
-		//	_paddedGrid[i] = new bool[_nPaddedCols];
-		//}
-
 		// Initialize maps
 		for (int i=0; i<_nRows; i++)
 		{
 			for (int j=0; j<_nCols; j++)
 			{
-				//sherif edited
-				/*_grid[OFFSET (i,j)] = _paddedGrid[OFFSET (i,j)] = -1;*/
 				_grid[OFFSET (i,j)] = _paddedGrid[OFFSETP (i,j)] = false;
 			}
 		}
@@ -100,17 +83,6 @@ private:
 
 		_grid = new bool[_nRows * _nCols];
 		_paddedGrid = new bool[_nPaddedRows * _nPaddedCols];
-
-		/*	for (i = 0; i<_nRows; i++)
-			{
-				_grid[i] = new bool[_nCols];
-				_paddedGrid[i] = new bool[_nPaddedCols];
-			}
-
-			for (; i<_nPaddedRows; i++)
-			{
-				_paddedGrid[i] = new bool[_nPaddedCols];
-			}*/
 
 		unsigned int readIndex = 0;
 
@@ -144,20 +116,18 @@ public:
 			ofs.open ("[logfile] Master.txt");
 			clog.rdbuf (ofs.rdbuf() );
 
-			// Todo uncomment code
-			//if (_size == 1)
-			//{
-			//	cerr << "[MASTER]: Minimum number of machines is 2\nExitting.." << endl;
-			//	MPI::Finalize();
-			//	exit (EXIT_FAILURE);
-			//}
+			if (_size == 1)
+			{
+				cerr << "[MASTER]: Minimum number of machines is 2\nExitting.." << endl;
+				MPI::Finalize();
+				exit (EXIT_FAILURE);
+			}
 
 			InitMasterMap (mapPath);
 
 			clog << "[MASTER]: Finished initializing map" << endl;
 
 
-			// todo remove comment
 			int nChunks = _nRows / (_size-1);
 			clog << "nrows: " << _nRows << " nChunks: " <<   nChunks << "  nCols: " << _nPaddedCols << " size: " << _size - 1<< endl;
 
@@ -223,24 +193,10 @@ public:
 	~GOL_Engine()
 	{
 		if (_grid != NULL)
-		{
-			/*for (int i=0; i<_nRows; i++)
-			{
-				delete[] _grid[i];
-			}*/
-
-			delete[] _grid;
-		}
+		{ delete[] _grid; }
 
 		if (_paddedGrid != NULL)
-		{
-			/*for (int i=0; i<_nPaddedRows; i++)
-			{
-				delete[] _paddedGrid[i];
-			}*/
-
-			delete[] _paddedGrid;
-		}
+		{ delete[] _paddedGrid; }
 
 		ofs.close();
 
@@ -416,14 +372,15 @@ public:
 
 			try
 			{
-				//#pragma omp parallel
+				#pragma omp parallel
 				{
 					//int tid = omp_get_thread_num();
 					//cout << "Thread no. " << tid << " of " <<  omp_get_num_threads() << endl;
 
 					try
 					{
-						//#pragma omp for
+						#pragma omp for
+
 						for (int y=1; y<_nPaddedRows - 1; y++)
 						{
 							//cout << "iteration no. " << y << endl;
@@ -473,8 +430,6 @@ public:
 				cerr << "[Slave " << _rank << " ]: " <<  e->what() << endl;
 				MPI::Finalize();
 			}
-
-			//swap (_paddedGrid, _grid);
 
 			clog << "[Slave " << _rank << " ]: Finished Applying rules" << endl;
 		}
