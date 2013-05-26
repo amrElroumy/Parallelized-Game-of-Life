@@ -27,7 +27,7 @@ int main (int argc, char** argv)
 		golEngine.ForkDataToSlaves();
 		golEngine.ApplyRules();
 		golEngine.CombineDataToMaster();
-		golEngine.DisplayPadded();
+		golEngine.Display();
 	}
 
 	golEngine.Dispose();

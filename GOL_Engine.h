@@ -469,7 +469,7 @@ public:
 						}
 
 						if (nAliveAdj < 2 || nAliveAdj > 3)
-						{ _grid[OFFSET (y-1, x-x)] = false; }
+						{ _grid[OFFSET (y-1, x-1)] = false; }
 						else
 							if ( (nAliveAdj == 2 && _paddedGrid[OFFSETP (y,x)] == true) || nAliveAdj == 3)
 							{ _grid[OFFSET (y-1,x-1)] = true; }
@@ -515,9 +515,11 @@ public:
 
 			MPI::Request* requests = new MPI::Request[_size-1];
 
+			clog << "[MASTER]: nChunks: " << nChunks << " nCols: " << _nCols << " remainder: " << remainder << endl;
+
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Irecv (_grid, (nChunks) * _nCols, MPI::INT, i, TAG_DATA);
+				requests[i-1] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks) * _nCols, MPI::INT, i, TAG_DATA);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
@@ -525,7 +527,7 @@ public:
 			}
 
 			// The last process takes the normal chunk size + remaining rows
-			requests[_size - 2] = MPI::COMM_WORLD.Irecv (_grid, (nChunks + remainder) * _nCols, MPI::INT, _size - 1, TAG_DATA);
+			requests[_size - 2] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks + remainder) * _nCols, MPI::INT, _size - 1, TAG_DATA);
 
 			MPI::Request::Waitall (_size-1, requests);
 
@@ -540,6 +542,7 @@ public:
 				//MPI::Finalize();
 			}
 
+			DisplayL();
 			clog << "[MASTER]: Finished combining data from slaves" << endl;
 
 		}
