@@ -9,7 +9,7 @@
 #include <assert.h>
 #include <iosfwd>
 #include <sstream>
-#include <omp.h>
+//#include <omp.h>
 using namespace std;
 #pragma endregion
 
@@ -374,7 +374,7 @@ public:
 
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::INT, i, TAG_DATA_FORK);
+				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::BOOL, i, TAG_DATA_FORK);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
@@ -385,7 +385,7 @@ public:
 			{
 				// The last process takes the normal chunk size + remaining rows
 				int remainder = _nRows % (_size-1);
-				requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::INT, _size - 1, TAG_DATA_FORK);
+				requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::BOOL, _size - 1, TAG_DATA_FORK);
 
 				clog << "remainder: " << remainder << endl;
 			}
@@ -401,7 +401,7 @@ public:
 		{
 			clog << "[Slave " << _rank << " ]: Receiving data from master" << " nPaddedRows: " << _nPaddedRows << "nPaddedCols: " << _nPaddedCols << endl;
 
-			MPI::COMM_WORLD.Recv (_paddedGrid, ( (_nPaddedRows) * _nPaddedCols), MPI::INT, 0, TAG_DATA_FORK);
+			MPI::COMM_WORLD.Recv (_paddedGrid, ( (_nPaddedRows) * _nPaddedCols), MPI::BOOL, 0, TAG_DATA_FORK);
 
 			clog << "[Slave " << _rank << " ]: Received data from master" << endl;
 			DisplayPaddedL();
@@ -497,7 +497,7 @@ public:
 
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks) * _nCols, MPI::INT, i, TAG_DATA_COMBINE);
+				requests[i-1] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks) * _nCols, MPI::BOOL, i, TAG_DATA_COMBINE);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
@@ -505,7 +505,7 @@ public:
 			}
 
 			// The last process takes the normal chunk size + remaining rows
-			requests[_size - 2] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks + remainder) * _nCols, MPI::INT, _size - 1, TAG_DATA_COMBINE);
+			requests[_size - 2] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks + remainder) * _nCols, MPI::BOOL, _size - 1, TAG_DATA_COMBINE);
 
 			MPI::Request::Waitall (_size-1, requests);
 
@@ -526,7 +526,7 @@ public:
 		{
 			clog << "[Slave " << _rank << " ]: Sending data to master" << endl;
 
-			MPI::COMM_WORLD.Send (_grid, (_nRows) * _nCols, MPI::INT, 0, TAG_DATA_COMBINE);
+			MPI::COMM_WORLD.Send (_grid, (_nRows) * _nCols, MPI::BOOL, 0, TAG_DATA_COMBINE);
 
 			clog << "[Slave " << _rank << " ]: Sent data to master" << endl;
 		}
