@@ -1,9 +1,10 @@
+#pragma region Includes
 #include <iostream>
 #include <fstream>
 #include <string>
 #include "GOL_Engine.h"
 using namespace std;
-
+#pragma endregion
 
 int main (int argc, char** argv)
 {
@@ -12,22 +13,21 @@ int main (int argc, char** argv)
 
 	GOL_Engine golEngine (argc, argv, mapPath);
 
-	//golEngine.Display();
-	//golEngine.InitGhostCells();
-
-	//if (golEngine._rank == MASTER)
-	//{
-	//	//golEngine.Display();
-	//	golEngine.DisplayPadded();
-	//}
-
 	for (int i=0; i<nGenerations; i++)
 	{
 		golEngine.InitGhostCells();
 		golEngine.ForkDataToSlaves();
+
+		golEngine.DisplayL();
+
 		golEngine.ApplyRules();
 		golEngine.CombineDataToMaster();
-		golEngine.Display();
+
+		if (golEngine.Rank() == MASTER)
+		{
+			cout << "Gen: " << i << endl;
+			golEngine.Display();
+		}
 	}
 
 	golEngine.Dispose();

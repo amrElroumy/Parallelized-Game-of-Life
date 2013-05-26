@@ -1,3 +1,6 @@
+#pragma once
+
+#pragma region Include
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -6,11 +9,12 @@
 #include <assert.h>
 #include <iosfwd>
 #include <sstream>
+#include <omp.h>
 using namespace std;
+#pragma endregion
 
 #define OFFSET(Y, X) ((Y) * _nCols + (X))
 #define OFFSETP(Y, X) ((Y) * _nPaddedCols + (X))
-
 //#define OFFSETP(Y, X) ((Y+1) * _nPaddedCols + (X+1))
 
 class GOL_Engine
@@ -22,11 +26,13 @@ private:
 	int _nCols, _nRows;
 	int _nPaddedCols, _nPaddedRows;
 
-public:
+	int _size;
 	int _rank;
 
+public:
+	int Rank() const { return _rank; }
+
 private:
-	int _size;
 
 	//int OFFSETP(int Y, int X) { return Y * _nPaddedCols + X; }
 	//int OFFSET(int Y, int X) { return Y * _nCols + X; }
@@ -50,14 +56,13 @@ private:
 		return contents;
 	}
 
+	#pragma region Map Initialization
 	void InitSlaveMap()
 	{
 		assert (_rank != MASTER);
 
 		_grid = new bool[_nRows*_nCols];
 		_paddedGrid = new bool[_nPaddedRows * _nPaddedCols];
-
-		int i;
 
 		//for (i = 0; i<_nRows; i++)
 		//{
@@ -77,7 +82,7 @@ private:
 			{
 				//sherif edited
 				/*_grid[OFFSET (i,j)] = _paddedGrid[OFFSET (i,j)] = -1;*/
-				_grid[OFFSET (i,j)] = _paddedGrid[OFFSETP (i,j)] = -1;
+				_grid[OFFSET (i,j)] = _paddedGrid[OFFSETP (i,j)] = false;
 			}
 		}
 	}
@@ -96,8 +101,6 @@ private:
 		_grid = new bool[_nRows * _nCols];
 		_paddedGrid = new bool[_nPaddedRows * _nPaddedCols];
 
-		int i;
-
 		/*	for (i = 0; i<_nRows; i++)
 			{
 				_grid[i] = new bool[_nCols];
@@ -109,8 +112,7 @@ private:
 				_paddedGrid[i] = new bool[_nPaddedCols];
 			}*/
 
-		int readIndex = 0;
-
+		unsigned int readIndex = 0;
 
 		for (int y=0; y<_nRows && readIndex<representation.length(); y++)
 		{
@@ -125,8 +127,10 @@ private:
 		}
 	}
 
+	#pragma endregion
 
 public:
+	#pragma region Constructor
 	GOL_Engine (int argc, char** argv, string mapPath)
 	{
 		MPI::Init (argc, argv);
@@ -151,7 +155,6 @@ public:
 			InitMasterMap (mapPath);
 
 			clog << "[MASTER]: Finished initializing map" << endl;
-			clog.flush();
 
 
 			// todo remove comment
@@ -176,12 +179,21 @@ public:
 			}
 
 			MPI::Request::Waitall (_size-1, requests);
-			delete[] requests;
+
+			try
+			{
+				delete[] requests;
+			}
+			catch
+				(std::exception* e)
+			{
+				cerr << e->what() << endl;
+				MPI::Finalize();
+			}
 
 			clog << "[MASTER]: Finished sending map dimensions to slaves" << endl;
 
 			clog << "[MASTER]: Finished initializing process" << endl;
-			clog.flush();
 		}
 		else
 		{
@@ -203,22 +215,11 @@ public:
 			InitSlaveMap();
 
 			clog << "[Slave " << _rank << " ]: Finished initializing process " << "Rows: " << _nRows << " Cols: " << _nCols << endl;
-			clog.flush();
 		}
 	}
+	#pragma endregion
 
-	/*GOL_Engine (const char* representation, int width, int height) : _width (width), _height (height)
-	{
-		_matrix = new bool[_width * _height];
-		_doubleBuffer = new bool[_width * _height];
-
-		for (int readIndex=0, writeIndex = 0; readIndex<strlen (representation); readIndex++)
-		{
-			if (representation[readIndex]!='\n')
-			{ _matrix[writeIndex++] = (bool) (representation[readIndex] - '0'); }
-		}
-	}*/
-
+	#pragma region Destructor
 	~GOL_Engine()
 	{
 		if (_grid != NULL)
@@ -245,9 +246,13 @@ public:
 
 		MPI::Finalize();
 	}
+	#pragma endregion
 
+	#pragma region Logging Functions
 	void DisplayPaddedL()
 	{
+		clog << "Padded: \n";
+
 		// Called only in MASTER so we neglect the ghost rows and columns
 		for (int y=0; y<_nPaddedRows; y++)
 		{
@@ -280,6 +285,8 @@ public:
 	void DisplayL()
 	{
 		// Called only in MASTER so we neglect the ghost rows and columns
+		clog << "Grid: \n";
+
 		for (int y=0; y<_nRows; y++)
 		{
 			for (int x=0; x<_nCols; x++)
@@ -292,6 +299,7 @@ public:
 
 		clog << endl;
 	}
+
 	void Display()
 	{
 		// Called only in MASTER so we neglect the ghost rows and columns
@@ -308,6 +316,8 @@ public:
 		cout << endl;
 	}
 
+	#pragma endregion
+
 	void InitGhostCells()
 	{
 		if (_rank == MASTER)
@@ -321,17 +331,6 @@ public:
 				_paddedGrid[OFFSETP (i,_nPaddedCols - 1)] = _grid[OFFSET (i-1,0)];	    // Right ghost column from leftmost column
 			}
 
-			//this->Display();
-
-			//for (int i=1; i<_nRows + 1; i++)
-			//{
-			//	cout << "i: " << i << endl;
-			//	cout << (int) _paddedGrid[OFFSETP (i, 0)] << " " <<  (int) _grid[OFFSET (i-1, _nCols-1)] << endl;			// Left ghost column from rightmost column
-			//	cout << "OFFSET (i-1,0): " << OFFSET (i-1,0) << endl;
-			//	cout << (int) _paddedGrid[OFFSETP (i,_nPaddedCols - 1)] << " " << (int)_grid[OFFSET (i-1,0)] << endl;;	    // Right ghost column from leftmost column
-			//	cout << endl;
-			//}
-
 			// copy top and bottom
 			for (int i=1; i<_nCols + 1; i++)
 			{
@@ -339,17 +338,7 @@ public:
 				_paddedGrid[OFFSETP (_nPaddedRows - 1,i)] = _grid[OFFSET (0,i-1)];
 			}
 
-			/*for (int i = 0; i<_nPaddedRows; i++)
-			{
-				for (int j = 0; j<_nPaddedCols; j++)
-				{
-					cout << _paddedGrid[i * _nPaddedCols + j];
-
-				}
-
-				cout << endl;
-			}*/
-
+			// Copy the actual cells to the padded grid
 			for (int y=0; y<_nRows; y++)
 			{
 				for (int x=0; x<_nCols; x++)
@@ -358,33 +347,11 @@ public:
 				}
 			}
 
-			/*for (int i = 0; i<_nPaddedRows; i++)
-			{
-				for (int j = 0; j<_nPaddedCols; j++)
-				{
-					cout << _paddedGrid[i * _nPaddedCols + j];
-
-				}
-
-				cout << endl;
-			}*/
-
 			// copy corner cells by mirroring diagonals
 			_paddedGrid[OFFSETP (0,0)]								  =_grid[OFFSET (_nRows - 1, _nCols-1)];
 			_paddedGrid[OFFSETP (0,_nPaddedCols - 1)]				  =_grid[OFFSET (_nRows - 1, 0)];
 			_paddedGrid[OFFSETP (_nPaddedRows - 1, 0)]				  =_grid[OFFSET (0,_nCols-1)];
 			_paddedGrid[OFFSETP (_nPaddedRows - 1, _nPaddedCols - 1)] =_grid[OFFSET (0,0)];
-
-			//for (int i = 0; i<_nPaddedRows; i++)
-			//{
-			//	for (int j = 0; j<_nPaddedCols; j++)
-			//	{
-			//		cout << _paddedGrid[i * _nPaddedCols + j];
-
-			//	}
-
-			//	cout << endl;
-			//}
 
 			clog << "[MASTER]: Finished initializing ghost rows" << endl;
 		}
@@ -395,12 +362,11 @@ public:
 		if (_rank == MASTER)
 		{
 			clog << "[MASTER]: Forking data to slaves" << endl;
-			clog.flush();
-
-			int nChunks = (_nRows / (_size-1) ) + 2;
-			int remainder = _nRows % (_size-1);
 
 			int start = 0; // The start index takes in account the index of the first ghost row
+			int nChunks = (_nRows / (_size-1) ) + 2;
+
+			clog << "nChunks: " << nChunks << "  nPaddedCols: " << _nPaddedCols;
 
 			DisplayPaddedL();
 
@@ -408,78 +374,98 @@ public:
 
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::INT, i, TAG_DATA);
+				requests[i-1] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks) * _nPaddedCols , MPI::INT, i, TAG_DATA_FORK);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
 				start += nChunks - 2;
 			}
 
-			clog << "nChunks: " << nChunks << " " << "nPaddedCols: " << _nPaddedCols << "remainder: " << remainder << endl;
+			if (_size > 2)
+			{
+				// The last process takes the normal chunk size + remaining rows
+				int remainder = _nRows % (_size-1);
+				requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::INT, _size - 1, TAG_DATA_FORK);
 
-			// The last process takes the normal chunk size + remaining rows
-			requests[_size - 2] = MPI::COMM_WORLD.Isend (&_paddedGrid[OFFSETP (start, 0)], (nChunks + remainder) * _nPaddedCols, MPI::INT, _size - 1, TAG_DATA);
+				clog << "remainder: " << remainder << endl;
+			}
 
+			// Wait for all threads to receive the data from the master thread
 			MPI::Request::Waitall (_size-1, requests);
-			//delete[] requests;
+			delete[] requests;
 
 			clog << "[MASTER]: Finished forking data to slaves" << endl;
-			clog.flush();
 
 		}
 		else
 		{
 			clog << "[Slave " << _rank << " ]: Receiving data from master" << " nPaddedRows: " << _nPaddedRows << "nPaddedCols: " << _nPaddedCols << endl;
-			clog.flush();
 
-			MPI::COMM_WORLD.Recv (_paddedGrid, ( (_nPaddedRows) * _nPaddedCols), MPI::INT, 0, TAG_DATA);
+			MPI::COMM_WORLD.Recv (_paddedGrid, ( (_nPaddedRows) * _nPaddedCols), MPI::INT, 0, TAG_DATA_FORK);
 
 			clog << "[Slave " << _rank << " ]: Received data from master" << endl;
 			DisplayPaddedL();
-			clog.flush();
-
 		}
 	}
 
 	void ApplyRules()
 	{
 		if (_rank != MASTER)
-			/*{
-				clog << "[MASTER]: Applying rules" << endl;
-			}
-			else
-			{*/
 		{
 			clog << "[Slave " << _rank << " ]: Applying rules" << endl;
 
 			try
 			{
-				for (int y=1; y<_nPaddedRows - 1; y++)
+				//#pragma omp parallel
 				{
-					for (int x = 1; x<_nPaddedCols - 1; x++)
-					{
-						int nAliveAdj = 0;
+					//int tid = omp_get_thread_num();
+					//cout << "Thread no. " << tid << " of " <<  omp_get_num_threads() << endl;
 
-						for (int i=0; i<8; i++)
+					try
+					{
+						//#pragma omp for
+						for (int y=1; y<_nPaddedRows - 1; y++)
 						{
-							if (isInPaddedMap (adjX[i] + x, adjY[i] + y) && (_paddedGrid[ OFFSETP ( (adjY[i] + y), (adjX[i] + x) )]) )
+							//cout << "iteration no. " << y << endl;
+
+							for (int x = 1; x<_nPaddedCols - 1; x++)
 							{
-								nAliveAdj++;
+								int nAliveAdj = 0;
+
+								for (int i=0; i<8; i++)
+								{
+									//cout << "i: " << i << endl;
+									//cout << "y: " << y << " x:" << x << endl;
+
+									if (isInPaddedMap (adjX[i] + x, adjY[i] + y) && (_paddedGrid[ OFFSETP ( (adjY[i] + y), (adjX[i] + x) )]) )
+									{
+										nAliveAdj++;
+									}
+								}
+
+								if (nAliveAdj < 2 || nAliveAdj > 3)
+								{ _grid[OFFSET (y-1, x-1)] = false; }
+								else
+									if ( (nAliveAdj == 2 && _paddedGrid[OFFSETP (y,x)] == true) || nAliveAdj == 3)
+									{ _grid[OFFSET (y-1,x-1)] = true; }
+									else
+									{ _grid[OFFSET (y-1,x-1)] = false; }
 							}
 						}
-
-						if (nAliveAdj < 2 || nAliveAdj > 3)
-						{ _grid[OFFSET (y-1, x-1)] = false; }
-						else
-							if ( (nAliveAdj == 2 && _paddedGrid[OFFSETP (y,x)] == true) || nAliveAdj == 3)
-							{ _grid[OFFSET (y-1,x-1)] = true; }
-							else
-							{ _grid[OFFSET (y-1,x-1)] = false; }
 					}
+					catch
+						(std::exception* e)
+					{
+						cout << "Exception " << e->what() << endl;
+					}
+					catch
+						(MPI::Exception* e)
+					{
+						cout << "Exception " << e->Get_error_string() << endl;
+					}
+
+					this->DisplayL();
 				}
-
-				this->DisplayL();
-
 			}
 			catch
 				(std::exception* e)
@@ -490,15 +476,7 @@ public:
 
 			//swap (_paddedGrid, _grid);
 
-			/*if (_rank == MASTER)
-			{
-				clog << "[MASTER]: Finished applying rules" << endl;
-			}
-			else
-			{*/
 			clog << "[Slave " << _rank << " ]: Finished Applying rules" << endl;
-			clog.flush();
-
 		}
 	}
 
@@ -519,7 +497,7 @@ public:
 
 			for (int i=1; i<_size-1; i++)
 			{
-				requests[i-1] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks) * _nCols, MPI::INT, i, TAG_DATA);
+				requests[i-1] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks) * _nCols, MPI::INT, i, TAG_DATA_COMBINE);
 
 				// Update the start index to stand on the row above the last sent row
 				// to send it to the next process and be able to process the last sent row
@@ -527,7 +505,7 @@ public:
 			}
 
 			// The last process takes the normal chunk size + remaining rows
-			requests[_size - 2] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks + remainder) * _nCols, MPI::INT, _size - 1, TAG_DATA);
+			requests[_size - 2] = MPI::COMM_WORLD.Irecv (&_grid[OFFSET (start, 0)], (nChunks + remainder) * _nCols, MPI::INT, _size - 1, TAG_DATA_COMBINE);
 
 			MPI::Request::Waitall (_size-1, requests);
 
@@ -539,18 +517,16 @@ public:
 				(std::exception* e)
 			{
 				cerr << e->what() << endl;
-				//MPI::Finalize();
+				MPI::Finalize();
 			}
 
-			DisplayL();
 			clog << "[MASTER]: Finished combining data from slaves" << endl;
-
 		}
 		else
 		{
 			clog << "[Slave " << _rank << " ]: Sending data to master" << endl;
 
-			MPI::COMM_WORLD.Send (_grid, (_nRows) * _nCols, MPI::INT, 0, TAG_DATA);
+			MPI::COMM_WORLD.Send (_grid, (_nRows) * _nCols, MPI::INT, 0, TAG_DATA_COMBINE);
 
 			clog << "[Slave " << _rank << " ]: Sent data to master" << endl;
 		}
@@ -561,8 +537,9 @@ public:
 		clog.flush();
 		cerr.flush();
 		this->~GOL_Engine();
+		exit (EXIT_SUCCESS);
 	}
 };
 
-const int GOL_Engine::adjX[] = { 1, -1, 0, 0, 1, 1, -1, -1};
-const int GOL_Engine::adjY[] = { 0, 0, 1, -1, 1, -1, 1, -1};
+const int GOL_Engine::adjX[] = { 1, -1, 0,  0, 1,  1, -1, -1};
+const int GOL_Engine::adjY[] = { 0,  0, 1, -1, 1, -1,  1, -1};
